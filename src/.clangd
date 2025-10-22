@@ -1,0 +1,7 @@
+CompileFlags:
+  Add:
+    - -I/opt/conda/targets/x86_64-linux/include/
+    - -nocudainc
+    - -nocudalib
+  Remove:
+    - -forward-unknown-to-host-compiler
