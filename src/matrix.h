@@ -19,12 +19,18 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
    }
 }
 
+/*
+Struct representing matrix of size nrows x ncols, stored in row-major format.
+*/
 struct matrix{
     private:
         size_t nrows,ncols,size;
-        bool device;
+        unsigned char device; // 0 is host, > 0 is CUDA
         float *data;
 
+        /*
+        Allocates this->size bytes of host memory.
+        */
         void malloc_host(){
             if(this->data){
                 this->memfree();
@@ -33,6 +39,9 @@ struct matrix{
             this->device = 0;
         }
 
+        /*
+        Allocates this->size bytes of device memory.
+        */
         void malloc_device(){
             if(this->data){
                 this->memfree();
@@ -42,6 +51,9 @@ struct matrix{
         }
     
     public:
+        /*
+        Frees memory allocated by object.
+        */
         void memfree(){
             if(this->data){
                 if(this->device){
@@ -54,9 +66,19 @@ struct matrix{
                 this->device = 0;
             }
         }
-
-        void to_host(){
-            if(this->data && this->device){
+        void to(unsigned char device){
+            if(!this->data || (device == this->device)){
+                return;
+            }
+            if(device){
+                float *d_arr;
+                CUDA_CHECK_ERROR(cudaMalloc(&d_arr, this->size));
+                CUDA_CHECK_ERROR(cudaMemcpy(d_arr, this->data, this->size, cudaMemcpyHostToDevice));
+                this->memfree();
+                this->data = d_arr;
+                this->device = 1;
+            }
+            else{
                 float *h_arr = (float*)malloc(this->size);
                 CUDA_CHECK_ERROR(cudaMemcpy(h_arr, this->data, this->size, cudaMemcpyDeviceToHost));
                 this->memfree();
@@ -65,28 +87,17 @@ struct matrix{
             }
         }
 
-        void to_device(){
-            if(this->data && !this->device){
-                float *d_arr;
-                CUDA_CHECK_ERROR(cudaMalloc(&d_arr, this->size));
-                CUDA_CHECK_ERROR(cudaMemcpy(d_arr, this->data, this->size, cudaMemcpyHostToDevice));
-                this->memfree();
-                this->data = d_arr;
-                this->device = 1;
-            }
-        }
-
         matrix()
             : nrows(0), ncols(0), size(0), 
             device(0), data(nullptr){}
 
-        matrix(const size_t nrows, const size_t ncols, bool device = 0)
+        matrix(const size_t nrows, const size_t ncols, unsigned char device = 0)
             : nrows(nrows), ncols(ncols), size(nrows * ncols * sizeof(float)), 
             device(0), data(nullptr) {
             if (device) {
-                malloc_device();
+                this->malloc_device();
             } else {
-                malloc_host();
+                this->malloc_host();
             }
         }
 
@@ -150,19 +161,19 @@ struct matrix{
         }
 };
 
-// void print_matrix(const matrix &mat){
-//     if(!mat.get_device()){
-//         std::cout << "[";
-//         for(size_t i = 0; i < mat.get_nrows(); i++){
-//             std::cout << "[";
-//             for(size_t j = 0; j < mat.get_ncols()-1; j++){
-//                 std::cout << (float)mat(i,j) << ",";
-//             }
-//             std::cout << (float)mat(i,mat.get_ncols()-1) << "]" << std::endl;
-//         }
-//         std::cout << "]" << std::endl;
-//     }
-//     else{
-//         std::cout << "Cant print matrix on device memory." << std::endl;
-//     }
-// }
+void print_matrix(const matrix &mat){
+    if(!mat.get_device()){
+        std::cout << "[";
+        for(size_t i = 0; i < mat.get_nrows(); i++){
+            std::cout << "[";
+            for(size_t j = 0; j < mat.get_ncols()-1; j++){
+                std::cout << (float)mat(i,j) << ",";
+            }
+            std::cout << (float)mat(i,mat.get_ncols()-1) << "]" << std::endl;
+        }
+        std::cout << "]" << std::endl;
+    }
+    else{
+        std::cout << "Cant print matrix on device memory." << std::endl;
+    }
+}

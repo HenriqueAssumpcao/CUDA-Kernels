@@ -3,6 +3,10 @@
 #define WARP_SIZE 32
 #define CEIL_DIV(x, y) (x + y - 1) / y
 
+
+__global__ void 
+
+
 /*
 Naive matrix multiplication kernel.
 */
