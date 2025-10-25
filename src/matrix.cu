@@ -4,7 +4,6 @@
 
 #include <cuda_device_runtime_api.h>
 #include <driver_types.h>
-#include <cuda_runtime.h>
 
 #define CUDA_CHECK_ERROR(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
