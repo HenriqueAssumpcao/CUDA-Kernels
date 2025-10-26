@@ -21,87 +21,96 @@ A: M x K
 B: K x N
 C: M x N
 */
-__global__ void matmul_naive(const float *A,const float *B,float *C,
+__global__ void matmul_naive(const float *A,
+                             const float *B,
+                             float *C,
                              int M, int K, int N)
 {
-    size_t trow = threadIdx.y;
-    size_t tcol = threadIdx.x;
+    const size_t trow = threadIdx.y;
+    const size_t tcol = threadIdx.x;
 
-    size_t row =  blockDim.y*blockIdx.y + trow;
-    size_t col = blockDim.x*blockIdx.x + tcol;
+    const size_t row =  blockDim.y*blockIdx.y + trow;
+    const size_t col = blockDim.x*blockIdx.x + tcol;
 
     if(row < M && col < N){
         double dot = 0.0;
         for(size_t k = 0; k < K; k++){
             dot += A[row*K + k]*B[k*N + col];
         }
-        C[row*N + col] = dot;
+        C[row*N + col] = (float)dot;
     }
 }
 
 /*
 Global Memory Coalescing matmul kernel.
 */
-template <const int WARP_SZ>
-__global__ void matmul_coalesce(const float *A,const float *B,float *C,
+template <const int BLOCK_SZ>
+__global__ void matmul_coalesce(const float *A,
+                                const float *B,
+                                float *C,
                                 int M, int K, int N)
 {
-    size_t trow = threadIdx.x / WARP_SZ;
-    size_t tcol = threadIdx.x % WARP_SZ;
+    const size_t trow = threadIdx.x / BLOCK_SZ;
+    const size_t tcol = threadIdx.x % BLOCK_SZ;
 
-    size_t row = blockDim.y*blockIdx.y + trow;
-    size_t col = blockDim.x*blockIdx.x + tcol;
+    const size_t row = blockDim.y*blockIdx.y + trow;
+    const size_t col = blockDim.x*blockIdx.x + tcol;
 
     if(row < M && col < N){
         double dot = 0.0;
         for(size_t k = 0; k < K; k++){
             dot += A[row*K + k]*B[k*N + col];
         }
-        C[row*N + col] = dot;
+        C[row*N + col] = (float)dot;
     }
 }
 
 /*
 Shared memory and gmc matmul kernel.
-Assumes blockDim(WARP_SZ*WARP_SZ,1,1),gridDim(CEIL_DIV(M,WARP_SZ),CEIL_DIV(N,WARP_SZ),1).
+Assumes blockDim(BLOCK_SZ*BLOCK_SZ,1,1),gridDim(CEIL_DIV(M,BLOCK_SZ),CEIL_DIV(N,BLOCK_SZ),1).
 */
-template <const int WARP_SZ>
-__global__ void matmul_shared(const float *A,const float *B,float *C,
-                                int M, int K, int N)
+template <const int BLOCK_SZ>
+__global__ void matmul_shared(const float *A,
+                              const float *B,
+                              float *C,
+                              int M, int K, int N)
 {
-    size_t trow = threadIdx.x / WARP_SZ;
-    size_t tcol = threadIdx.x % WARP_SZ;
 
-    __shared__ float s_A[WARP_SZ*WARP_SZ],s_B[WARP_SZ*WARP_SZ];
+    __shared__ float s_A[BLOCK_SZ*BLOCK_SZ];
+    __shared__ float s_B[BLOCK_SZ*BLOCK_SZ];
 
-    A += blockIdx.y * WARP_SZ * K;
-    B += blockIdx.x * WARP_SZ;
-    C += (blockIdx.y * WARP_SZ * N) + (blockIdx.x * WARP_SZ);
+    const size_t trow = threadIdx.x / BLOCK_SZ;
+    const size_t tcol = threadIdx.x % BLOCK_SZ;
+
+    A += blockIdx.y * BLOCK_SZ * K;
+    B += blockIdx.x * BLOCK_SZ;
+    C += (blockIdx.y * BLOCK_SZ * N) + (blockIdx.x * BLOCK_SZ);
     
     double dot = 0.0;
 
-    for(size_t bIdx = 0; bIdx < K; bIdx += WARP_SZ){
-        s_A[trow*WARP_SZ + tcol] = A[trow*K + tcol];
-        s_B[trow*WARP_SZ + tcol] = B[trow*N + tcol];
+    for(size_t bIdx = 0; bIdx < K; bIdx += BLOCK_SZ){
+        s_A[trow*BLOCK_SZ + tcol] = A[trow*K + tcol];
+        s_B[trow*BLOCK_SZ + tcol] = B[trow*N + tcol];
 
         __syncthreads();
 
-        for(size_t k = 0;k < WARP_SZ; ++k){
-            dot += s_A[trow*WARP_SZ + k]*s_B[k*WARP_SZ + tcol];
+        #pragma unroll
+        for(size_t k = 0;k < BLOCK_SZ; ++k){
+            dot += s_A[trow*BLOCK_SZ + k] * s_B[k*BLOCK_SZ + tcol];
         }
 
-        A += WARP_SZ;
-        B += (WARP_SZ*N);
+        A += BLOCK_SZ;
+        B += (BLOCK_SZ*N);
 
         __syncthreads();   
 
     }
-    C[trow*N + tcol] = dot;
+    C[trow*N + tcol] = (float)dot;
 }
 
 
 
-// template <const int WARP_SZ>
+// template <const int BLOCK_SZ>
 // __host__ void run_matmul_kernel(const float *h_A,const float *h_B,float *h_C,
 //                                 int M, int K, int N,
 //                                 void(*matmul_kernel)(const float*, const float*, float*, int, int, int),
