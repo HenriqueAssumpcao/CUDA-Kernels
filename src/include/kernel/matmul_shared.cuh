@@ -12,7 +12,7 @@ A: M x K
 B: K x N
 C: M x N
 */
-template <const int BLOCK_SZ>
+template <const uint BLOCK_SZ>
 __global__ void matmul_shared(const float *A,
                               const float *B,
                               float *C,
@@ -31,7 +31,7 @@ __global__ void matmul_shared(const float *A,
     __shared__ float B_shared[BLOCK_SZ*BLOCK_SZ];
 
     
-    double dot = 0.0;
+    float dot = 0.0f;
     for(uint bIdx = 0; bIdx < K; bIdx += BLOCK_SZ){
         A_shared[trow * BLOCK_SZ + tcol] = (crow < M && (bIdx + tcol) < K) ? A_ptr[trow * K + tcol] : 0.0f;
         B_shared[trow * BLOCK_SZ + tcol] = ((bIdx + trow) < K && ccol < N) ? B_ptr[trow * N + tcol] : 0.0f;
@@ -49,6 +49,6 @@ __global__ void matmul_shared(const float *A,
 
     }
     if(crow < M && ccol < N){
-        C[crow * N + ccol] = (float)dot;
+        C[crow * N + ccol] = dot;
     }
 }

@@ -12,6 +12,7 @@ A: M x K
 B: K x N
 C: M x N
 */
+template <const uint BLOCK_SZ>
 __global__ void matmul_naive(const float *A,
                              const float *B,
                              float *C,
@@ -20,14 +21,14 @@ __global__ void matmul_naive(const float *A,
     const uint trow = threadIdx.y;
     const uint tcol = threadIdx.x;
 
-    const uint crow = blockIdx.y * blockDim.y + trow;
-    const uint ccol = blockIdx.x * blockDim.x + tcol;
+    const uint crow = blockIdx.y * BLOCK_SZ + trow;
+    const uint ccol = blockIdx.x * BLOCK_SZ + tcol;
 
     if(crow < M && ccol < N){
-        double dot = 0.0;
+        float dot = 0.0f;
         for(uint k = 0; k < K; ++k){
             dot += A[crow*K + k]*B[k*N + ccol];
         }
-        C[crow*N + ccol] = (float)dot;
+        C[crow*N + ccol] = dot;
     }
 }
