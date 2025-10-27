@@ -6,8 +6,9 @@
 
 #include <driver_types.h>
 #include <cuda_runtime.h>
-#include <cuda_fp16.h>
 #include "device_launch_parameters.h"
+
+// matrix
 
 #define CUDA_CHECK_ERROR(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
@@ -23,7 +24,6 @@ inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=t
 Struct representing matrix of size nrows x ncols, stored in row-major format.
 */
 struct matrix{
-    private:
         size_t nrows,ncols,size;
         unsigned char device; // 0 is host, > 0 is CUDA
         float *data;
@@ -49,8 +49,7 @@ struct matrix{
             CUDA_CHECK_ERROR(cudaMalloc(&this->data, this->size));
             this->device = 1;
         }
-    
-    public:
+
         /*
         Frees memory allocated by object.
         */
@@ -136,44 +135,12 @@ struct matrix{
             }
             return *this;
         }
-                
-        // read-only get
-        __host__ __device__ size_t get_nrows() const{
-            return this->nrows;
-        }
-        __host__ __device__ size_t get_ncols() const{
-            return this->ncols;
-        }
-        __host__ __device__ size_t get_size() const{
-            return this->size;
-        }
-        __host__ __device__ bool get_device() const{
-            return this->device;
-        }
-
-        // access matrix element
-
-        __host__ __device__ float& operator()(const size_t row,const size_t col) {
-            return this->data[row * this->ncols + col];
-        }
-        __host__ __device__ const float& operator()(const size_t row,const size_t col) const {
-            return this->data[row * this->ncols + col];
-        }
 };
 
-void print_matrix(const matrix &mat){
-    if(!mat.get_device()){
-        std::cout << "[";
-        for(size_t i = 0; i < mat.get_nrows(); i++){
-            std::cout << "[";
-            for(size_t j = 0; j < mat.get_ncols()-1; j++){
-                std::cout << (float)mat(i,j) << ",";
-            }
-            std::cout << (float)mat(i,mat.get_ncols()-1) << "]" << std::endl;
-        }
-        std::cout << "]" << std::endl;
-    }
-    else{
-        std::cout << "Cant print matrix on device memory." << std::endl;
-    }
+int main(int argc, char* argv[]){
+
+
+
+
+    return 0;
 }
