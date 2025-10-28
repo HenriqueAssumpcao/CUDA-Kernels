@@ -9,73 +9,53 @@
 #define CEIL_DIV(x, y) (x + y - 1) / y
 
 template <const uint BLOCK_SZ>
-__host__ void run_matmul_naive(const float *A,
-                             const float *B,
-                             float *C,
-                             int M, int K, int N)
+__host__ void run_sgemm_naive(const float *A,
+                              const float *B,
+                              float *C,
+                              int M, int K, int N,
+                              float alpha, float beta)
 {
-    dim3 gridDim(CEIL_DIV(M,BLOCK_SZ),CEIL_DIV(N,BLOCK_SZ),1);
+    dim3 gridDim(CEIL_DIV(N,BLOCK_SZ),CEIL_DIV(M,BLOCK_SZ),1);
     dim3 blockDim(BLOCK_SZ,BLOCK_SZ,1);
 
-    matmul_naive<BLOCK_SZ><<<gridDim,blockDim>>>(A,B,C,M,K,N);
+    sgemm_naive<BLOCK_SZ><<<gridDim,blockDim>>>(A,B,C,M,K,N,alpha,beta);
 }
 
 template <const uint BLOCK_SZ>
-__host__ void run_matmul_naive_ref(const float *A,
-                             const float *B,
-                             float *C,
-                             int M, int K, int N)
+__host__ void run_sgemm_coalesce(const float *A,
+                                 const float *B,
+                                 float *C,
+                                 int M, int K, int N,
+                                 float alpha, float beta)
 {
-    dim3 gridDim(CEIL_DIV(M,BLOCK_SZ),CEIL_DIV(N,BLOCK_SZ),1);
-    dim3 blockDim(BLOCK_SZ,BLOCK_SZ,1);
-
-    sgemm_naive_ref<<<gridDim,blockDim>>>(A,B,C,M,K,N);
-}
-
-template <const uint BLOCK_SZ>
-__host__ void run_matmul_coalesce(const float *A,
-                             const float *B,
-                             float *C,
-                             int M, int K, int N)
-{
-    dim3 gridDim(CEIL_DIV(M,BLOCK_SZ),CEIL_DIV(N,BLOCK_SZ),1);
+    dim3 gridDim(CEIL_DIV(N,BLOCK_SZ),CEIL_DIV(M,BLOCK_SZ),1);
     dim3 blockDim(BLOCK_SZ*BLOCK_SZ,1,1);
 
-    matmul_coalesce<BLOCK_SZ><<<gridDim,blockDim>>>(A,B,C,M,K,N);
+    sgemm_coalesce<BLOCK_SZ><<<gridDim,blockDim>>>(A,B,C,M,K,N,alpha,beta);
 }
 
-template <const uint BLOCK_SZ>
-__host__ void run_matmul_coalesce_ref(const float *A,
+template <const uint BM, const uint BK, const uint BN>
+__host__ void run_sgemm_shared(const float *A,
                              const float *B,
                              float *C,
-                             int M, int K, int N)
+                             int M, int K, int N,
+                             float alpha, float beta)
 {
-    dim3 gridDim(CEIL_DIV(M,BLOCK_SZ),CEIL_DIV(N,BLOCK_SZ),1);
-    dim3 blockDim(BLOCK_SZ*BLOCK_SZ,1,1);
+    dim3 gridDim(CEIL_DIV(N,BN),CEIL_DIV(M,BM),1);
+    dim3 blockDim(BM*BN,1,1);
 
-    sgemm_global_mem_coalesce<BLOCK_SZ><<<gridDim,blockDim>>>(A,B,C,M,K,N);
+    sgemm_shared<BM,BK,BN><<<gridDim,blockDim>>>(A,B,C,M,K,N,alpha,beta);
 }
 
-template <const uint BLOCK_SZ>
-__host__ void run_matmul_shared(const float *A,
-                             const float *B,
-                             float *C,
-                             int M, int K, int N)
+template <const uint BM, const uint BK, const uint BN, const uint TM, const uint TN>
+__host__ void run_sgemm_blocktiling(const float *A,
+                                             const float *B,
+                                             float *C,
+                                             int M, int K, int N,
+                                             float alpha, float beta)
 {
-    dim3 gridDim(CEIL_DIV(M,BLOCK_SZ),CEIL_DIV(N,BLOCK_SZ),1);
-    dim3 blockDim(BLOCK_SZ*BLOCK_SZ,1,1);
+    dim3 gridDim(CEIL_DIV(N,BN),CEIL_DIV(M,BM),1);
+    dim3 blockDim((BM*BN)/(TM * TN),1,1);
 
-    matmul_shared<BLOCK_SZ><<<gridDim,blockDim>>>(A,B,C,M,K,N);
-}
-
-template <const uint BLOCK_SZ>
-__host__ void run_matmul_shared_ref(const float *A,
-                             const float *B,
-                             float *C,
-                             int M, int K, int N)
-{
-    dim3 gridDim(CEIL_DIV(M,BLOCK_SZ),CEIL_DIV(N,BLOCK_SZ),1);
-    dim3 blockDim(BLOCK_SZ*BLOCK_SZ,1,1);
-
-    sgemm_shared_mem_block<BLOCK_SZ><<<gridDim,blockDim>>>(A,B,C,M,K,N);
+    sgemm_blocktiling<BM,BK,BN,TM,TN><<<gridDim,blockDim>>>(A,B,C,M,K,N,alpha,beta);
 }

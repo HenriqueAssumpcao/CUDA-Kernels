@@ -4,10 +4,11 @@
 #include <iostream>
 #include <assert.h>
 
-void matmul_cpu(const float *A,
-            const float *B,
-            float *C,
-            int M, int K, int N){
+void sgemm_cpu(const float *A,
+               const float *B,
+               float *C,
+               int M, int K, int N,
+               float alpha = 1, float beta = 0){
 
     for(size_t i = 0; i < M; ++i){
         for(size_t j = 0; j < N; ++j){
@@ -15,7 +16,7 @@ void matmul_cpu(const float *A,
             for(size_t k = 0; k < K; ++k){
                 dot += A[i*K + k]*B[k*N + j];
             }
-            C[i*N + j] = dot;
+            C[i*N + j] = alpha * dot + beta * C[i*N + j];
         }
     }
 }
@@ -32,13 +33,13 @@ bool matrices_close(const matrix &A,const matrix &B, float tolerance) {
 
 void compute_stats(const float data[], const int size, float& mean, float& std_dev) {
     float sum = 0.0f;
-    for (int i = 0; i < size; i++) {
+    for (size_t i = 0; i < size; i++) {
         sum += data[i];
     }
     mean = sum / size;
 
     float variance = 0.0f;
-    for (int i = 0; i < size; i++) {
+    for (size_t i = 0; i < size; i++) {
         float diff = data[i] - mean;
         variance += diff * diff;
     }
@@ -48,7 +49,7 @@ void compute_stats(const float data[], const int size, float& mean, float& std_d
 void rand_matrix(matrix &mat, float min_val = 0.0f, float max_val = 1.0f) {
     float range = max_val - min_val;
     
-    for (int i = 0; i < (mat.nrows*mat.ncols); i++) {
+    for (size_t i = 0; i < (mat.nrows*mat.ncols); i++) {
         mat.data[i] = min_val + (float)rand() / RAND_MAX * range;
     }
 }

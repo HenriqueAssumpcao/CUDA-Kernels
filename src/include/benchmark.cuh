@@ -36,7 +36,7 @@ void benchmark_kernel(const size_t nruns, const size_t M, const size_t N, const 
     // warmup
     const size_t warmup_runs = std::min(nruns / 10, size_t(10));
     for(size_t i = 0; i < warmup_runs; ++i) {
-        run_kernel(A.data, B.data, C.data, M, K, N);
+        run_kernel(A.data, B.data, C.data, M, K, N,1,0);
         cudaDeviceSynchronize();
     }
     
@@ -48,7 +48,7 @@ void benchmark_kernel(const size_t nruns, const size_t M, const size_t N, const 
         cudaDeviceSynchronize();
         
         cudaEventRecord(start);
-        run_kernel(A.data, B.data, C.data, M, K, N);
+        run_kernel(A.data, B.data, C.data, M, K, N,1,0);
         cudaEventRecord(stop);
         
         cudaEventSynchronize(stop);

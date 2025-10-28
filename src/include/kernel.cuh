@@ -1,6 +1,6 @@
 #pragma once 
 
-#include "kernel/matmul_naive.cuh"
-#include "kernel/matmul_coalesce.cuh"
-#include "kernel/matmul_shared.cuh"
-#include "kernel/ref.cuh"
+#include "kernel/sgemm_naive.cuh"
+#include "kernel/sgemm_coalesce.cuh"
+#include "kernel/sgemm_shared.cuh"
+#include "kernel/sgemm_blocktiling.cuh"

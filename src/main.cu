@@ -9,10 +9,6 @@
 #include "include/benchmark.cuh"
 #include "include/runners.cuh"
 
-#define CUDA_ID 1
-#define HOST_ID 0
-
-
 int main(int argc, char* argv[]){
     if(argc < 6){ 
         std::cout << "Usage: " << argv[0] << " <num_runs> <M> <N> <K> <seed>" << std::endl;
@@ -29,12 +25,10 @@ int main(int argc, char* argv[]){
         const float TOL = 1e-5f;
 
         auto kernels = {
-            std::make_pair(run_matmul_naive<32>, "Naive matmul"),
-            std::make_pair(run_matmul_naive_ref<32>, "Naive matmul ref"),
-            std::make_pair(run_matmul_coalesce<32>, "Coalesce matmul"),
-            std::make_pair(run_matmul_coalesce_ref<32>, "Coalesce matmul ref"),
-            std::make_pair(run_matmul_shared<32>, "Shared matmul"),
-            std::make_pair(run_matmul_shared_ref<32>, "Shared matmul ref")
+            std::make_pair(run_sgemm_naive<32>, "Naive matmul (32)"),
+            std::make_pair(run_sgemm_coalesce<32>, "Coalesce matmul (32)"),
+            std::make_pair(run_sgemm_shared<32,32,32>, "Shared matmul (32,32,32)"),
+            std::make_pair(run_sgemm_blocktiling<64,8,64,4,4>, "Shared matmul (64,8,64,4,4)")
         };
 
 
