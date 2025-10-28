@@ -2,36 +2,34 @@
 
 #include <stdlib.h>
 
-#include <driver_types.h>
-#include <cuda_runtime.h>
 #include "device_launch_parameters.h"
+#include <cuda_runtime.h>
+#include <driver_types.h>
 
 /*
 Naive single precision general sgemm kernel.
-Assumes blockDim(BLOCK_SZ,BLOCK_SZ,1),gridDim(CEIL_DIV(N,BLOCK_SZ),CEIL_DIV(M,BLOCK_SZ),1).
+Assumes
+blockDim(BLOCK_SZ,BLOCK_SZ,1),gridDim(CEIL_DIV(N,BLOCK_SZ),CEIL_DIV(M,BLOCK_SZ),1).
 Assumes row-major arrays.
 A: M x K
 B: K x N
 C: M x N
 */
 template <const uint BLOCK_SZ>
-__global__ void sgemm_naive(const float *A,
-                             const float *B,
-                             float *C,
-                             int M, int K, int N,
-                             float alpha, float beta)
-{
-    const uint trow = threadIdx.y;
-    const uint tcol = threadIdx.x;
+__global__ void sgemm_naive(const float *A, const float *B, float *C, int M,
+                            int K, int N, float alpha, float beta) {
+    const uint thread_row = threadIdx.y;
+    const uint thread_col = threadIdx.x;
 
-    const uint crow = blockIdx.y * BLOCK_SZ + trow;
-    const uint ccol = blockIdx.x * BLOCK_SZ + tcol;
+    const uint global_row = blockIdx.y * BLOCK_SZ + thread_row;
+    const uint global_col = blockIdx.x * BLOCK_SZ + thread_col;
 
-    if(crow < M && ccol < N){
+    if (global_row < M && global_col < N) {
         float dot = 0.0f;
-        for(uint k = 0; k < K; ++k){
-            dot += A[crow * K + k]*B[k * N + ccol];
+        for (uint k = 0; k < K; ++k) {
+            dot += A[global_row * K + k] * B[k * N + global_col];
         }
-        C[crow * N + ccol] = alpha * dot + beta * C[crow * N + ccol];
+        C[global_row * N + global_col] =
+            alpha * dot + beta * C[global_row * N + global_col];
     }
 }

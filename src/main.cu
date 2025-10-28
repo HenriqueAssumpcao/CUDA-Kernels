@@ -3,22 +3,23 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include <driver_types.h>
 #include <cuda_runtime.h>
+#include <driver_types.h>
 
 #include "include/benchmark.cuh"
 #include "include/runners.cuh"
 
-int main(int argc, char* argv[]){
-    if(argc < 6){ 
-        std::cout << "Usage: " << argv[0] << " <num_runs> <M> <N> <K> <seed>" << std::endl;
+int main(int argc, char *argv[]) {
+    if (argc < 6) {
+        std::cout << "Usage: " << argv[0] << " <num_runs> <M> <N> <K> <seed>"
+                  << std::endl;
         return 1;
     }
-    
+
     try {
         const size_t nruns = std::stoul(argv[1]);
         const size_t M = std::stoul(argv[2]);
-        const size_t N = std::stoul(argv[3]); 
+        const size_t N = std::stoul(argv[3]);
         const size_t K = std::stoul(argv[4]);
         const int seed = std::stoi(argv[5]);
 
@@ -27,17 +28,15 @@ int main(int argc, char* argv[]){
         auto kernels = {
             std::make_pair(run_sgemm_naive<32>, "Naive matmul (32)"),
             std::make_pair(run_sgemm_coalesce<32>, "Coalesce matmul (32)"),
-            std::make_pair(run_sgemm_shared<32,32,32>, "Shared matmul (32,32,32)"),
-            std::make_pair(run_sgemm_blocktiling<64,8,64,4,4>, "Shared matmul (64,8,64,4,4)")
-        };
+            std::make_pair(run_sgemm_shared<32, 32, 32>,
+                           "Shared matmul (32,32,32)")};
 
-
-        for(auto& [kernel_func, name] : kernels) {
+        for (auto &[kernel_func, name] : kernels) {
             benchmark_kernel(nruns, M, N, K, seed, TOL, kernel_func, name);
             cudaDeviceSynchronize();
-        }   
-        
-    } catch (const std::exception& e) {
+        }
+
+    } catch (const std::exception &e) {
         std::cerr << "Error parsing arguments: " << e.what() << std::endl;
         return 1;
     }
