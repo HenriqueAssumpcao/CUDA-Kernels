@@ -46,7 +46,6 @@ out/
 cmake-build-*/
 CMakeCache.txt
 CMakeFiles/
-Makefile
 *.vcxproj
 *.vcxproj.filters
 *.sln
