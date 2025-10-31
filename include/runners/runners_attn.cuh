@@ -1,6 +1,5 @@
 #pragma once
 
-#include "device_launch_parameters.h"
 #include <cuda_runtime.h>
 #include <driver_types.h>
 
@@ -8,7 +7,7 @@
 #include "runners_sgemm.cuh"
 #include "utils.cuh"
 
-template <const uint BSZ, const uint TSZ_N>
+template <const int BSZ, const int TSZ_N>
 __host__ void run_transpose(const float *A, float *At, int M, int N) {
 
     dim3 block_dim(BSZ * (BSZ / TSZ_N), 1, 1);
@@ -17,7 +16,7 @@ __host__ void run_transpose(const float *A, float *At, int M, int N) {
     transpose<BSZ, TSZ_N><<<grid_dim, block_dim>>>(A, At, M, N);
 }
 
-template <const uint BSZ>
+template <const int BSZ>
 __host__ void run_softmax(const float *scores, float *attn_scores, int N, int d) {
 
     dim3 block_dim(BSZ, 1, 1);
@@ -49,7 +48,7 @@ __host__ void run_attn_naive(const float *Q, const float *K, const float *V,
     CUDA_CHECK_ERROR(cudaFree(S));
 }
 
-template <const uint BSZ_R, const uint BSZ_C>
+template <const int BSZ_R, const int BSZ_C>
 __host__ void run_flash_attn(const float *Q, const float *K, const float *V,
                            float *O, int N, int d)
 {

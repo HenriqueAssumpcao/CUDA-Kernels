@@ -1,6 +1,5 @@
 #pragma once
 #include <cuda_runtime.h>
-#include <device_launch_parameters.h>
 #include <math.h>
 
 #include "utils.cuh"
@@ -8,7 +7,7 @@
 #define INF __int_as_float(0xff800000)
 
 
-template <const uint BSZ_R, const uint BSZ_C>
+template <const int BSZ_R, const int BSZ_C>
 __global__ void flash_attn(const float *Q, const float *K, const float *V,
                            float *O, int N, int d) {
 
@@ -16,9 +15,9 @@ __global__ void flash_attn(const float *Q, const float *K, const float *V,
     __shared__ float Ks[BSZ_C][d];
     __shared__ float Vs[BSZ_C][d];
 
-    const uint thread_row = threadIdx.y;
-    const uint global_row = blockIdx.x * BSZ_R + thread_row;
-    const uint num_col_blocks = CEIL_DIV(N, BSZ_C);
+    const int thread_row = threadIdx.y;
+    const int global_row = blockIdx.x * BSZ_R + thread_row;
+    const int num_col_blocks = CEIL_DIV(N, BSZ_C);
 
     for (int k = threadIdx.x; k < d; k += BSZ_C) {
         Qs[thread_row][k] = (global_row < N) ? Q[global_row * d + k] : 0.0f;

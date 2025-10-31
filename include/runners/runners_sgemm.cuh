@@ -1,6 +1,5 @@
 #pragma once
 
-#include "device_launch_parameters.h"
 #include <cuda_runtime.h>
 #include <driver_types.h>
 

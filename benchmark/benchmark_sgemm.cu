@@ -1,16 +1,14 @@
 #include <algorithm>
 #include <assert.h>
 #include <iostream>
-#include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <vector>
 
 #include <cuda_runtime.h>
 #include <driver_types.h>
 
 #include "matrix.cuh"
-#include "runners_sgemm.cuh"
+#include "runners/runners_sgemm.cuh"
 #include "utils.cuh"
 
 template <typename RunKernelFunc>
