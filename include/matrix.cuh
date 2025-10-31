@@ -7,39 +7,7 @@
 #include <cuda_runtime.h>
 #include <driver_types.h>
 
-/**
- * @brief Macro for automatic CUDA error checking
- * @param ans CUDA function call to check for errors
- *
- * Wraps CUDA API calls and automatically checks for errors using gpuAssert.
- * Usage: CUDA_CHECK_ERROR(cudaMalloc(&ptr, size));
- */
-#define CUDA_CHECK_ERROR(ans)                                                  \
-    {                                                                          \
-        gpuAssert((ans), __FILE__, __LINE__);                                  \
-    }
-/**
- * @brief Internal function for CUDA error assertion and reporting
- * @param code CUDA error code returned from CUDA API call s
- * @param file Source file where the error occurred
- * @param line Line number where the error occurred
- * @param abort Whether to terminate program on error (default: true)
- *
- * Prints detailed error information and optionally terminates the program
- * if a CUDA error is detected.
- */
-inline void gpuAssert(cudaError_t code, const char *file, int line,
-                      bool abort = true) {
-    if (code != cudaSuccess) {
-        fprintf(stderr, "GPUassert: %s %s %d\n", cudaGetErrorString(code), file,
-                line);
-        if (abort)
-            exit(code);
-    }
-}
-
-#define CUDA_ID 1
-#define HOST_ID 0
+#include "utils.cuh"
 
 /**
  * @brief Matrix structure supporting both host and device memory management
@@ -219,3 +187,109 @@ struct matrix {
      */
     ~matrix() { this->memfree(); }
 };
+
+/**
+ * @brief Compare two matrices for numerical equivalence within a tolerance
+ * @param A First matrix to compare
+ * @param B Second matrix to compare
+ * @param tolerance Maximum allowed absolute difference between elements
+ * @return true if all corresponding elements differ by at most tolerance, false
+ * otherwise
+ *
+ * Performs element-wise comparison of two matrices. Matrices must have
+ * identical dimensions. Useful for validating correctness of matrix operations
+ * with floating-point arithmetic.
+ */
+bool matrices_close(const matrix &A, const matrix &B, float tolerance) {
+    assert(A.size == B.size);
+    for (size_t i = 0; i < (A.nrows * A.ncols); ++i) {
+        if (fabs(A.data[i] - B.data[i]) > tolerance) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/**
+ * @brief Compute statistical measures (mean and standard deviation) of an array
+ * @param data Input array of floating-point values
+ * @param size Number of elements in the array
+ * @param mean Reference to store computed mean value
+ * @param std_dev Reference to store computed standard deviation
+ *
+ * Calculates the arithmetic mean and population standard deviation of the input
+ * data. Uses a two-pass algorithm: first pass computes mean, second pass
+ * computes variance.
+ */
+void compute_stats(const float data[], const int size, float &mean,
+                   float &std_dev) {
+    float sum = 0.0f;
+    for (int i = 0; i < size; i++) {
+        sum += data[i];
+    }
+    mean = sum / size;
+
+    float variance = 0.0f;
+    for (int i = 0; i < size; i++) {
+        float diff = data[i] - mean;
+        variance += diff * diff;
+    }
+    std_dev = sqrtf(variance / size);
+}
+
+/**
+ * @brief Fill matrix with random values within a specified range
+ * @param mat Matrix to populate with random values (must be in host memory)
+ * @param min_val Minimum value for random generation (default: 0.0)
+ * @param max_val Maximum value for random generation (default: 1.0)
+ *
+ * Fills the matrix with uniformly distributed random floating-point values
+ * between min_val and max_val using the standard C rand() function.
+ */
+void rand_matrix(matrix &mat, float min_val = 0.0f, float max_val = 1.0f) {
+    float range = max_val - min_val;
+
+    for (size_t i = 0; i < (mat.nrows * mat.ncols); i++) {
+        mat.data[i] = min_val + (float)rand() / RAND_MAX * range;
+    }
+}
+
+/**
+ * @brief Initialize all matrix elements to zero
+ * @param mat Matrix to zero-initialize (must be in host memory)
+ *
+ * Sets all elements of the matrix to 0.0f using nested loops
+ * to iterate through rows and columns.
+ */
+void zero_matrix(matrix &mat) {
+    for (size_t i = 0; i < mat.nrows; i++) {
+        for (size_t j = 0; j < mat.ncols; j++) {
+            mat.data[i * mat.ncols + j] = 0;
+        }
+    }
+}
+
+/**
+ * @brief Print matrix contents to standard output in readable format
+ * @param mat Matrix to print (must be in host memory)
+ *
+ * Displays the matrix in a bracketed format with each row on a separate line.
+ * Only works for matrices in host memory; displays an error message for
+ * device matrices. Format: [[row1], [row2], ..., [rowN]]
+ */
+void print_matrix(const matrix &mat) {
+    if (!mat.device) {
+        std::cout << "[";
+        for (size_t i = 0; i < mat.nrows; i++) {
+            std::cout << "[";
+            for (size_t j = 0; j < mat.ncols - 1; j++) {
+                std::cout << mat.data[i * mat.ncols + j] << ",";
+            }
+            std::cout << mat.data[i * mat.ncols + (mat.ncols - 1)] << "]"
+                      << std::endl;
+        }
+        std::cout << "]" << std::endl;
+    } else {
+        std::cout << "Cant print matrix on device memory." << std::endl;
+    }
+}

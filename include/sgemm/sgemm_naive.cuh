@@ -8,7 +8,7 @@
 
 /**
  * @brief Memory-coalesced naive CUDA kernel for single-precision general matrix multiplication (SGEMM)
- * @tparam BLOCK_SZ Block size dimension (square block conceptually, but launched as 1D)
+ * @tparam BSZ Block size dimension (square block conceptually, but launched as 1D)
  * @param A Input matrix A (M x K) in row-major order, device memory
  * @param B Input matrix B (K x N) in row-major order, device memory
  * @param C Output matrix C (M x N) in row-major order, device memory
@@ -21,19 +21,19 @@
  * Each thread computes a single element of the output matrix C.
  * 
  * Launch configuration requirements:
- * - blockDim: (BLOCK_SZ * BLOCK_SZ, 1, 1)
- * - gridDim: (CEIL_DIV(N, BLOCK_SZ), CEIL_DIV(M, BLOCK_SZ), 1)
+ * - blockDim: (BSZ * BSZ, 1, 1)
+ * - gridDim: (CEIL_DIV(N, BSZ), CEIL_DIV(M, BSZ), 1)
  * 
  * Performs the operation: C = alpha * A * B + beta * C
  */
-template <const uint BLOCK_SZ>
+template <const uint BSZ>
 __global__ void sgemm_naive(const float *A, const float *B, float *C, int M,
                                int K, int N, float alpha, float beta) {
-    const uint thread_row = (threadIdx.x / BLOCK_SZ);
-    const uint thread_col = (threadIdx.x % BLOCK_SZ);
+    const uint thread_row = (threadIdx.x / BSZ);
+    const uint thread_col = (threadIdx.x % BSZ);
 
-    const uint global_row = blockIdx.y * BLOCK_SZ + thread_row;
-    const uint global_col = blockIdx.x * BLOCK_SZ + thread_col;
+    const uint global_row = blockIdx.y * BSZ + thread_row;
+    const uint global_col = blockIdx.x * BSZ + thread_col;
 
     if (global_row < M && global_col < N) {
         float dot = 0.0f;

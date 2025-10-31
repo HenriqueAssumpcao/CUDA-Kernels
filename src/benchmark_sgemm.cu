@@ -10,18 +10,21 @@
 #include <driver_types.h>
 
 #include "matrix.cuh"
+#include "runners_sgemm.cuh"
 #include "utils.cuh"
-#include "runners.cuh"
 
 template <typename RunKernelFunc>
 void benchmark_sgemm_kernel(const size_t nruns, const size_t M, const size_t N,
-                      const size_t K, const int seed, const float TOL,
-                      RunKernelFunc run_kernel,
-                      const std::string &kernel_name = "") {
+                            const size_t K, const int seed, const float TOL,
+                            RunKernelFunc run_kernel,
+                            const std::string &kernel_name = "") {
 
-    std::cout << "\n============================================================" << std::endl;
+    std::cout
+        << "\n============================================================"
+        << std::endl;
     std::cout << "Benchmarking Kernel: " << kernel_name << std::endl;
-    std::cout << "Matrix Dimensions: M=" << M << ", N=" << N << ", K=" << K << std::endl;
+    std::cout << "Matrix Dimensions: M=" << M << ", N=" << N << ", K=" << K
+              << std::endl;
 
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
@@ -72,7 +75,8 @@ void benchmark_sgemm_kernel(const size_t nruns, const size_t M, const size_t N,
     std::cout << "Runtime (ms): " << mean << " ± " << std_dev
               << " [min: " << runtimes[0] << ", max: " << runtimes.back() << "]"
               << std::endl;
-    std::cout << "============================================================" << std::endl;
+    std::cout << "============================================================"
+              << std::endl;
 
     cudaEventDestroy(start);
     cudaEventDestroy(stop);
@@ -97,16 +101,15 @@ int main(int argc, char *argv[]) {
 
         const float TOL = 1e-5f;
 
-        auto kernels = {
-            std::make_pair(run_sgemm_naive<32>, "Naive sgemm (32)"),
-            std::make_pair(run_sgemm_blocktiling<32, 32, 32>,
-                           "Block tiling sgemm (32,32,32)"),
-            std::make_pair(run_sgemm_blocktiling<64, 8, 64, 4, 4>,
-                        "Thread tiling sgemm (64,8,64,4,4)")
-                           };
+        auto kernels = {std::make_pair(run_sgemm_naive<32>, "Naive sgemm (32)"),
+                        std::make_pair(run_sgemm_blocktiling<32, 32, 32>,
+                                       "Block tiling sgemm (32,32,32)"),
+                        std::make_pair(run_sgemm_blocktiling<64, 8, 64, 4, 4>,
+                                       "Thread tiling sgemm (64,8,64,4,4)")};
 
         for (auto &[kernel_func, name] : kernels) {
-            benchmark_sgemm_kernel(nruns, M, N, K, seed, TOL, kernel_func, name);
+            benchmark_sgemm_kernel(nruns, M, N, K, seed, TOL, kernel_func,
+                                   name);
             cudaDeviceSynchronize();
         }
 
