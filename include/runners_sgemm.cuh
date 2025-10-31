@@ -4,8 +4,8 @@
 #include <cuda_runtime.h>
 #include <driver_types.h>
 
-#include "sgemm.cuh"
 #include "attn.cuh"
+#include "sgemm.cuh"
 #include "utils.cuh"
 
 /**
@@ -20,11 +20,10 @@
  * @param alpha Scalar multiplier for A*B product (default: 1.0)
  * @param beta Scalar multiplier for existing C values (default: 0.0)
  *
- * Performs the operation C = alpha * A * B + beta * C using a triple nested
- * loop. This serves as a reference implementation for validating GPU kernels.
+ * Computes C = alpha * A * B + beta * C.
  */
-void run_sgemm_cpu(const float *A, const float *B, float *C, int M, int K, int N,
-               float alpha, float beta) {
+void run_sgemm_cpu(const float *A, const float *B, float *C, int M, int K,
+                   int N, float alpha, float beta) {
 
     for (int i = 0; i < M; ++i) {
         for (int j = 0; j < N; ++j) {
@@ -49,17 +48,15 @@ void run_sgemm_cpu(const float *A, const float *B, float *C, int M, int K, int N
  * @param alpha Scalar multiplier for A*B product
  * @param beta Scalar multiplier for existing C values
  *
- * Launches a SGEMM implementation with improved memory coalescing
- * using 1D thread blocks. Computes C = alpha * A * B + beta * C.
+ * Computes C = alpha * A * B + beta * C.
  */
-template <const uint BSZ>
-__host__ void run_sgemm_naive(const float *A, const float *B, float *C,
-                                 int M, int K, int N, float alpha, float beta) {
+template <const int BSZ>
+__host__ void run_sgemm_naive(const float *A, const float *B, float *C, int M,
+                              int K, int N, float alpha, float beta) {
     dim3 gridDim(CEIL_DIV(N, BSZ), CEIL_DIV(M, BSZ), 1);
-    dim3 blockDim(BSZ * BSZ, 1, 1);
+    dim3 blockDim(BSZ, BSZ, 1);
 
-    sgemm_naive<BSZ>
-        <<<gridDim, blockDim>>>(A, B, C, M, K, N, alpha, beta);
+    sgemm_naive<BSZ><<<gridDim, blockDim>>>(A, B, C, M, K, N, alpha, beta);
 }
 
 /**
@@ -76,16 +73,14 @@ __host__ void run_sgemm_naive(const float *A, const float *B, float *C,
  * @param alpha Scalar multiplier for A*B product
  * @param beta Scalar multiplier for existing C values
  *
- * Launches a block-tiled SGEMM implementation that uses shared memory
- * to improve data reuse and reduce global memory accesses.
  * Computes C = alpha * A * B + beta * C.
  */
-template <const uint BSZ_M, const uint BSZ_K, const uint BSZ_N>
+template <const int BSZ_M, const int BSZ_K, const int BSZ_N>
 __host__ void run_sgemm_blocktiling(const float *A, const float *B, float *C,
                                     int M, int K, int N, float alpha,
                                     float beta) {
     dim3 gridDim(CEIL_DIV(N, BSZ_N), CEIL_DIV(M, BSZ_M), 1);
-    dim3 blockDim(BSZ_M * BSZ_N, 1, 1);
+    dim3 blockDim(BSZ_M, BSZ_N, 1);
 
     sgemm_blocktiling<BSZ_M, BSZ_K, BSZ_N>
         <<<gridDim, blockDim>>>(A, B, C, M, K, N, alpha, beta);
@@ -107,17 +102,14 @@ __host__ void run_sgemm_blocktiling(const float *A, const float *B, float *C,
  * @param alpha Scalar multiplier for A*B product
  * @param beta Scalar multiplier for existing C values
  *
- * Launches an advanced SGEMM implementation combining block tiling and
- * thread-level tiling for maximum performance. Each thread computes
- * multiple output elements (TSZ_M x TSZ_N tile). Computes C = alpha * A * B + beta *
- * C.
+ * Computes C = alpha * A * B + beta * C.
  */
-template <const uint BSZ_M, const uint BSZ_K, const uint BSZ_N, const uint TSZ_M,
-          const uint TSZ_N>
-__host__ void run_sgemm_blocktiling(const float *A, const float *B, float *C,
-                                    int M, int K, int N, float alpha,
-                                    float beta) {
-    dim3 block_dim((BSZ_N / TSZ_N) * (BSZ_M / TSZ_M), 1, 1);
+template <const int BSZ_M, const int BSZ_K, const int BSZ_N, const int TSZ_M,
+          const int TSZ_N>
+__host__ void run_sgemm_threadtiling(const float *A, const float *B, float *C,
+                                     int M, int K, int N, float alpha,
+                                     float beta) {
+    dim3 block_dim((BSZ_N / TSZ_N), (BSZ_M / TSZ_M), 1);
     dim3 grid_dim(CEIL_DIV(N, BSZ_N), CEIL_DIV(M, BSZ_M), 1);
 
     sgemm_threadtiling<BSZ_M, BSZ_K, BSZ_N, TSZ_M, TSZ_N>

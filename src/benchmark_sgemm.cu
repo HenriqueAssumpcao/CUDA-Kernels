@@ -14,8 +14,8 @@
 #include "utils.cuh"
 
 template <typename RunKernelFunc>
-void benchmark_sgemm_kernel(const size_t nruns, const size_t M, const size_t N,
-                            const size_t K, const int seed, const float TOL,
+void benchmark_sgemm_kernel(const int nruns, const int M, const int N,
+                            const int K, const int seed, const float TOL,
                             RunKernelFunc run_kernel,
                             const std::string &kernel_name = "") {
 
@@ -38,8 +38,8 @@ void benchmark_sgemm_kernel(const size_t nruns, const size_t M, const size_t N,
     B.to(CUDA_ID);
     C.to(CUDA_ID);
 
-    const size_t warmup_runs = std::min(nruns / 10, size_t(10));
-    for (size_t i = 0; i < warmup_runs; ++i) {
+    const int warmup_runs = std::min(nruns / 10, int(10));
+    for (int i = 0; i < warmup_runs; ++i) {
         run_kernel(A.data, B.data, C.data, M, K, N, 1, 0);
         cudaDeviceSynchronize();
     }
@@ -48,7 +48,7 @@ void benchmark_sgemm_kernel(const size_t nruns, const size_t M, const size_t N,
 
     std::vector<float> runtimes(nruns);
 
-    for (size_t runIdx = 0; runIdx < nruns; ++runIdx) {
+    for (int runIdx = 0; runIdx < nruns; ++runIdx) {
         cudaDeviceSynchronize();
 
         cudaEventRecord(start);
@@ -93,10 +93,10 @@ int main(int argc, char *argv[]) {
     }
 
     try {
-        const size_t nruns = std::stoul(argv[1]);
-        const size_t M = std::stoul(argv[2]);
-        const size_t N = std::stoul(argv[3]);
-        const size_t K = std::stoul(argv[4]);
+        const int nruns = std::stoi(argv[1]);
+        const int M = std::stoi(argv[2]);
+        const int N = std::stoi(argv[3]);
+        const int K = std::stoi(argv[4]);
         const int seed = std::stoi(argv[5]);
 
         const float TOL = 1e-5f;
@@ -104,7 +104,7 @@ int main(int argc, char *argv[]) {
         auto kernels = {std::make_pair(run_sgemm_naive<32>, "Naive sgemm (32)"),
                         std::make_pair(run_sgemm_blocktiling<32, 32, 32>,
                                        "Block tiling sgemm (32,32,32)"),
-                        std::make_pair(run_sgemm_blocktiling<64, 8, 64, 4, 4>,
+                        std::make_pair(run_sgemm_threadtiling<64, 8, 64, 4, 4>,
                                        "Thread tiling sgemm (64,8,64,4,4)")};
 
         for (auto &[kernel_func, name] : kernels) {
