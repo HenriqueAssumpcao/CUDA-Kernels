@@ -5,11 +5,13 @@
 #include <assert.h>
 #include <cmath>
 #include <iostream>
-
+#include <float.h>
 #include <cuda_runtime.h>
 #include <driver_types.h>
 
+
 #define CEIL_DIV(x, y) (x + y - 1) / y
+#define NEG_INF -FLT_MAX
 
 /**
  * @brief Macro for automatic CUDA error checking

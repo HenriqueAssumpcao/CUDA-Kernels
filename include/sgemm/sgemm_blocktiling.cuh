@@ -26,11 +26,9 @@
  * dimension in chunks of size BSZ_K.
  *
  * Launch configuration requirements:
- * - blockDim: (BSZ_M,BSZ_N, 1) - 2D thread block with BSZ_M*BSZ_N threads
+ * - blockDim: (BSZ_N,BSZ_M, 1) - 2D thread block with BSZ_N*BSZ_M threads
  * - gridDim: (CEIL_DIV(N, BSZ_N), CEIL_DIV(M, BSZ_M), 1)
  *
- * Template parameter constraints:
- * - BSZ_K <= min(BSZ_M, BSZ_N) to ensure proper shared memory loading
  *
  * Performs the operation: C = alpha * A * B + beta * C
  */
@@ -42,28 +40,42 @@ __global__ void sgemm_blocktiling(const float *A, const float *B, float *C,
     const int thread_row = threadIdx.y;
     const int thread_col = threadIdx.x;
 
-    const int global_row = blockIdx.y * BSZ_M + thread_row;
-    const int global_col = blockIdx.x * BSZ_N + thread_col;
+    const int block_start_row = blockIdx.y * BSZ_M;
+    const int block_start_col = blockIdx.x * BSZ_N;
+
+    const int global_row = block_start_row + thread_row;
+    const int global_col = block_start_col + thread_col;
+
+    const int thread_id = thread_row * BSZ_N + thread_col;
+    const int nthreads_block = BSZ_M * BSZ_N;
 
     __shared__ float As[BSZ_M][BSZ_K];
     __shared__ float Bs[BSZ_K][BSZ_N];
 
     float dot = 0.0f;
-    for (int btile_start = 0; btile_start < K;
-         btile_start += BSZ_K) {
 
-        if (thread_col < BSZ_K) {
-            As[thread_row][thread_col] =
-                (global_row < M && (btile_start + thread_col) < K)
-                    ? A[global_row * K + (btile_start + thread_col)]
-                    : 0.0f;
+    for (int block_tile_start = 0; block_tile_start < K;
+         block_tile_start += BSZ_K) {
+
+        // strided loads
+        for (int i = thread_id; i < (BSZ_M * BSZ_K); i += nthreads_block) {
+            int r = i / BSZ_K;
+            int c = i % BSZ_K;
+            int g_r = block_start_row + r;
+            int g_c = block_tile_start + c;
+
+            As[r][c] = (g_r < M && g_c < K) ? A[g_r * K + g_c] : 0.0f;
         }
-        if (thread_row < BSZ_K) {
-            Bs[thread_row][thread_col] =
-                ((btile_start + thread_row) < K && global_col < N)
-                    ? B[(btile_start + thread_row) * N + global_col]
-                    : 0.0f;
+
+        for (int i = thread_id; i < (BSZ_K * BSZ_N); i += nthreads_block) {
+            int r = i / BSZ_N;
+            int c = i % BSZ_N;
+            int g_r = block_tile_start + r;
+            int g_c = block_start_col + c;
+
+            Bs[r][c] = (g_r < K && g_c < N) ? B[g_r * N + g_c] : 0.0f;
         }
+
         __syncthreads();
 
         for (int k = 0; k < BSZ_K; ++k) {

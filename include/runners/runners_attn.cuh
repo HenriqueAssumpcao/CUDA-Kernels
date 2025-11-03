@@ -17,7 +17,8 @@ __host__ void run_transpose(const float *A, float *At, int M, int N) {
 }
 
 template <const int BSZ>
-__host__ void run_softmax(const float *scores, float *attn_scores, int N, int d) {
+__host__ void run_softmax(const float *scores, float *attn_scores, int N,
+                          int d) {
 
     dim3 block_dim(BSZ, 1, 1);
     dim3 grid_dim(1, CEIL_DIV(N, BSZ), 1);
@@ -25,7 +26,7 @@ __host__ void run_softmax(const float *scores, float *attn_scores, int N, int d)
     softmax<BSZ><<<grid_dim, block_dim>>>(scores, attn_scores, N, d);
 }
 
-__host__ void run_attn_naive(const float *Q, const float *K, const float *V,
+__host__ void run_naive_attn_fwd(const float *Q, const float *K, const float *V,
                              float *attn_scores, float *output, int N, int d,
                              float attn_scaling) {
 
@@ -48,11 +49,11 @@ __host__ void run_attn_naive(const float *Q, const float *K, const float *V,
     CUDA_CHECK_ERROR(cudaFree(S));
 }
 
-template <const int BSZ_R, const int BSZ_C>
-__host__ void run_flash_attn(const float *Q, const float *K, const float *V,
-                           float *O, int N, int d)
-{
-    dim3 block_dim(BSZ_C,BSZ_R);
-    dim3 grid_dim(CEIL_DIV(N, BSZ_R),1,1);
-    flash_attn<BSZ_R,BSZ_C><<<grid_dim,block_dim>>>(Q,K,V,O,N,d);
+template <const int BSZ_R, const int BSZ_C, const int BSZ_D>
+__host__ void run_flash_attn_fwd(const float *Q, const float *K, const float *V,
+                             float *O, int N, int d, float attn_scaling) {
+    dim3 block_dim(BSZ_C, BSZ_R);
+    dim3 grid_dim(1, CEIL_DIV(N, BSZ_R), 1);
+    static_assert((BSZ_C % 32) == 1,"BSZ_C must be a multiple of 32.");
+    flash_attn_fwd<BSZ_R, BSZ_C, BSZ_D><<<grid_dim, block_dim>>>(Q, K, V, O, N, d, attn_scaling);
 }

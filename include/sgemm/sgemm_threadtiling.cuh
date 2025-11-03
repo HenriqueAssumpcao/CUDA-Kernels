@@ -24,7 +24,7 @@
  * thread within the block computes a TSZ_M x TSZ_N sub-tile.
  *
  * Launch configuration requirements:
- * - blockDim: (BSZ_N / TSZ_N, BSZ_M / TSZ_M, 1) - A 2D block of threads.
+ * - blockDim: (BSZ_N / TSZ_N, BSZ_M / TSZ_M, 1).
  * - gridDim: (CEIL_DIV(N, BSZ_N), CEIL_DIV(M, BSZ_M), 1)
  *
  * Template parameter constraints:
@@ -46,17 +46,19 @@ __global__ void sgemm_threadtiling(const float *A, const float *B, float *C,
     const int global_row_start = block_start_row + thread_row * TSZ_M;
     const int global_col_start = block_start_col + thread_col * TSZ_N;
 
+    const int thread_id = thread_row * BSZ_N + thread_col;
+    const int nthreads_block = BSZ_M * BSZ_N;
+
     __shared__ float As[BSZ_M][BSZ_K];
     __shared__ float Bs[BSZ_K][BSZ_N];
 
     float dot[TSZ_M][TSZ_N] = {{0.0f}};
 
-    const int tid = thread_row * blockDim.x + thread_col;
-    const int nthreads_block = blockDim.x * blockDim.y;
-
     for (int block_tile_start = 0; block_tile_start < K;
          block_tile_start += BSZ_K) {
-        for (int i = tid; i < BSZ_M * BSZ_K; i += nthreads_block) {
+        
+        // strided loads
+        for (int i = thread_id; i < BSZ_M * BSZ_K; i += nthreads_block) {
             int r = i / BSZ_K;
             int c = i % BSZ_K;
             int g_row = block_start_row + r;
@@ -65,7 +67,7 @@ __global__ void sgemm_threadtiling(const float *A, const float *B, float *C,
             As[r][c] = (g_row < M && g_col < K) ? A[g_row * K + g_col] : 0.0f;
         }
 
-        for (int i = tid; i < BSZ_K * BSZ_N; i += nthreads_block) {
+        for (int i = thread_id; i < BSZ_K * BSZ_N; i += nthreads_block) {
             int r = i / BSZ_N;
             int c = i % BSZ_N;
             int g_row = block_tile_start + r;
@@ -75,19 +77,20 @@ __global__ void sgemm_threadtiling(const float *A, const float *B, float *C,
         }
 
         __syncthreads();
-
+        
+        // outer product
         for (int k = 0; k < BSZ_K; ++k) {
-            float rowA[TSZ_M];
+            float colA[TSZ_M];
             for (int i = 0; i < TSZ_M; ++i) {
-                rowA[i] = As[thread_row * TSZ_M + i][k];
+                colA[i] = As[thread_row * TSZ_M + i][k];
             }
-            float colB[TSZ_N];
+            float rowB[TSZ_N];
             for (int j = 0; j < TSZ_N; ++j) {
-                colB[j] = Bs[k][thread_col * TSZ_N + j];
+                rowB[j] = Bs[k][thread_col * TSZ_N + j];
             }
             for (int i = 0; i < TSZ_M; ++i) {
                 for (int j = 0; j < TSZ_N; ++j) {
-                    dot[i][j] += rowA[i] * colB[j];
+                    dot[i][j] += colA[i] * rowB[j];
                 }
             }
         }
