@@ -212,7 +212,8 @@ __global__ void hgemm_threadtiling(const half *A, const half *B, half *C, int M,
 
             if (global_row < M && global_col < N) {
                 C[global_row * N + global_col] = __float2half(
-                    alpha * dot[i][j] + beta * __half2float(C[global_row * N + global_col]));
+                    alpha * dot[i][j] +
+                    beta * __half2float(C[global_row * N + global_col]));
             }
         }
     }
