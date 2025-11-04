@@ -3,6 +3,7 @@
 #include <stdlib.h>
 
 #include "device_launch_parameters.h"
+#include <cuda_fp16.h>
 #include <cuda_runtime.h>
 #include <driver_types.h>
 
@@ -44,5 +45,46 @@ __global__ void sgemm_naive(const float *A, const float *B, float *C, int M,
         }
         C[global_row * N + global_col] =
             alpha * dot + beta * C[global_row * N + global_col];
+    }
+}
+
+/**
+ * @brief Memory-coalesced naive CUDA kernel for half-precision general matrix
+ * multiplication (HGEMM)
+ * @tparam BSZ Block size dimension
+ * @param A Input matrix A (M x K) in row-major order, device memory
+ * @param B Input matrix B (K x N) in row-major order, device memory
+ * @param C Output matrix C (M x N) in row-major order, device memory
+ * @param M Number of rows in matrices A and C
+ * @param K Number of columns in A and rows in B
+ * @param N Number of columns in matrices B and C
+ * @param alpha Scalar multiplier for A*B product
+ * @param beta Scalar multiplier for existing C values
+ *
+ * Each thread computes a single element of the output matrix C.
+ *
+ * Launch configuration requirements:
+ * - blockDim: (BSZ,BSZ, 1)
+ * - gridDim: (CEIL_DIV(N, BSZ), CEIL_DIV(M, BSZ), 1)
+ *
+ * Performs the operation: C = alpha * A * B + beta * C
+ */
+
+template <const int BSZ>
+__global__ void hgemm_naive(const half *A, const half *B, half *C, int M, int K,
+                            int N, float alpha, float beta) {
+    const int thread_row = threadIdx.y;
+    const int thread_col = threadIdx.x;
+
+    const int global_row = blockIdx.y * BSZ + thread_row;
+    const int global_col = blockIdx.x * BSZ + thread_col;
+
+    if (global_row < M && global_col < N) {
+        float dot = 0.0f;
+        for (int k = 0; k < K; ++k) {
+            dot += __half2float(A[global_row * K + k] * B[k * N + global_col]);
+        }
+        C[global_row * N + global_col] = __float2half(
+            alpha * dot + beta * __half2float(C[global_row * N + global_col]));
     }
 }

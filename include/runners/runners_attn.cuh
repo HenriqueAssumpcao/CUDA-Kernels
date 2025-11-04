@@ -51,7 +51,7 @@ __host__ void run_naive_attn_fwd(const float *Q, const float *K, const float *V,
 
 template <const int BSZ_R, const int BSZ_C, const int BSZ_D>
 __host__ void run_flash_attn_fwd(const float *Q, const float *K, const float *V,
-                             float *O, int N, int d, float attn_scaling) {
+                                 float *O, int N, int d, float attn_scaling) {
     dim3 block_dim(BSZ_C, BSZ_R);
     dim3 grid_dim(1, CEIL_DIV(N, BSZ_R), 1);
     static_assert((BSZ_C % 32) == 1,"BSZ_C must be a multiple of 32.");

@@ -8,7 +8,7 @@
 #include <driver_types.h>
 
 #include "matrix.cuh"
-#include "runners/runners_sgemm.cuh"
+#include "runners/runners_gemm.cuh"
 #include "utils.cuh"
 
 template <typename RunKernelFunc>
