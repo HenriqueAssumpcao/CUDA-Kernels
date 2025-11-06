@@ -8,6 +8,9 @@
 #include "runners_sgemm.cuh"
 #include "utils.cuh"
 
+/**
+ * @brief Host-side runner for the transpose kernel.
+ */
 template <const int BSZ, const int TSZ_N>
 __host__ void run_transpose(const float *A, float *At, int M, int N) {
 
@@ -17,6 +20,9 @@ __host__ void run_transpose(const float *A, float *At, int M, int N) {
     transpose<BSZ, TSZ_N><<<grid_dim, block_dim>>>(A, At, M, N);
 }
 
+/**
+ * @brief Host-side runner for the softmax kernel.
+ */
 template <const int BSZ>
 __host__ void run_softmax(const float *scores, float *attn_scores, int N,
                           int d) {
@@ -27,6 +33,9 @@ __host__ void run_softmax(const float *scores, float *attn_scores, int N,
     softmax<BSZ><<<grid_dim, block_dim>>>(scores, attn_scores, N, d);
 }
 
+/**
+ * @brief Host-side runner for naive attention kernel.
+ */
 __host__ void run_naive_attn_fwd(const float *Q, const float *K, const float *V,
                                  float *O, int N, int d, float attn_scaling) {
 
@@ -50,6 +59,9 @@ __host__ void run_naive_attn_fwd(const float *Q, const float *K, const float *V,
     CUDA_CHECK_ERROR(cudaFree(P));
 }
 
+/**
+ * @brief Host-side runner for theFP32 FlashAttention kernel.
+ */
 template <const int BSZ_R, const int BSZ_C, const int BSZ_D>
 __host__ void run_flash_attn_fwd_fp32(const float *Q, const float *K,
                                       const float *V, float *O, int N, int d,
@@ -62,14 +74,58 @@ __host__ void run_flash_attn_fwd_fp32(const float *Q, const float *K,
         <<<grid_dim, block_dim>>>(Q, K, V, O, N, d, attn_scaling);
 }
 
+/**
+ * @brief Host-side runner for the FP16 FlashAttention kernel.
+ */
 template <const int BSZ_R, const int BSZ_C, const int BSZ_D>
 __host__ void run_flash_attn_fwd_fp16(const half *Q, const half *K,
                                       const half *V, half *O, int N, int d,
                                       float attn_scaling) {
     dim3 block_dim(BSZ_C, BSZ_R);
     dim3 grid_dim(1, CEIL_DIV(N, BSZ_R), 1);
-    static_assert((BSZ_C % 32) == 1, "BSZ_C must be a multiple of 32.");
+    static_assert((BSZ_C % 32) == 0,
+                  "BSZ_C must be a multiple of 32 for warp shuffles.");
     static_assert(BSZ_C <= 1024, "BSZ_C must be at most 1024.");
     flash_attn_fwd_fp16<BSZ_R, BSZ_C, BSZ_D>
         <<<grid_dim, block_dim>>>(Q, K, V, O, N, d, attn_scaling);
+}
+
+/**
+ * @brief Host-side runner for the batched, multi-head FP32 FlashAttention
+ * kernel.
+ */
+template <const int BSZ_R, const int BSZ_C, const int BSZ_D>
+__host__ void run_flash_attn_fwd_fp32_bh(const float *Q, const float *K,
+                                         const float *V, float *O, int B, int H,
+                                         int N, int d, float attn_scaling) {
+
+    dim3 block_dim(BSZ_C, BSZ_R);
+    dim3 grid_dim(H, B, CEIL_DIV(N, BSZ_R));
+
+    static_assert((BSZ_C % 32) == 0,
+                  "BSZ_C must be a multiple of 32 for warp shuffles.");
+    static_assert(BSZ_C <= 1024, "BSZ_C must be at most 1024.");
+
+    flash_attn_fwd_mh_fp32<BSZ_R, BSZ_C, BSZ_D>
+        <<<grid_dim, block_dim>>>(Q, K, V, O, B, H, N, attn_scaling);
+}
+
+/**
+ * @brief Host-side runner for the batched, multi-head FP16 FlashAttention
+ * kernel.
+ */
+template <const int BSZ_R, const int BSZ_C, const int BSZ_D>
+__host__ void run_flash_attn_fwd_fp16_bh(const half *Q, const half *K,
+                                         const half *V, half *O, int B, int H,
+                                         int N, int d, float attn_scaling) {
+
+    dim3 block_dim(BSZ_C, BSZ_R);
+    dim3 grid_dim(H, B, CEIL_DIV(N, BSZ_R));
+
+    static_assert((BSZ_C % 32) == 0,
+                  "BSZ_C must be a multiple of 32 for warp shuffles.");
+    static_assert(BSZ_C <= 1024, "BSZ_C must be at most 1024.");
+
+    flash_attn_fwd_mh_fp16<BSZ_R, BSZ_C, BSZ_D>
+        <<<grid_dim, block_dim>>>(Q, K, V, O, B, H, N, attn_scaling);
 }

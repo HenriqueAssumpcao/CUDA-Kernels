@@ -5,31 +5,33 @@
 #include <cuda_runtime.h>
 
 /**
- * @brief Single precision FlashAttention Forward Pass Kernel.
+ * @brief Single precision FlashAttention Forward Pass Kernel with multiple
+ * heads and batches.
  *
  * @tparam BSZ_R Block size for rows of Q per thread block.
  * @tparam BSZ_C Block size for rows of K/V processed per main loop iteration.
  * @tparam D_HEAD Size of column dimension of input matrices.
  *
- * @param Q, K, V Input matrices in HBM (row-major).
- * @param O Output matrix in HBM (row-major).
+ * @param Q, K, V Input matrices in HBM (row-major, layout B, H, N, D_HEAD).
+ * @param O Output matrix in HBM (row-major, layout B, H, N, D_HEAD).
+ * @param B Batch size.
+ * @param H Number of heads.
  * @param N Sequence length.
  * @param d Head dimension.
  *
  * Launch configuration:
- * - gridDim: (1, CEIL_DIV(N, BSZ_R), 1)
- * - blockDim: (BSZ_C, BSZ_R, 1)  (BSZ_C must be a multiple of 32 for warp
- * shuffles and BSZ_C <= 1024)
+ * - gridDim: (H, B, CEIL_DIV(N, BSZ_R))
+ * - blockDim: (BSZ_C, BSZ_R, 1)
  */
 template <const int BSZ_R, const int BSZ_C, const int D_HEAD>
-__global__ void flash_attn_fwd_fp32(const float *Q, const float *K,
-                                    const float *V, float *O, int N,
-                                    float attn_scaling) {
+__global__ void flash_attn_mh_fwd_fp32(const float *Q, const float *K,
+                                       const float *V, float *O, int B, int H,
+                                       int N, float attn_scaling) {
     // indexing
     const int thread_row = threadIdx.y;
     const int thread_col = threadIdx.x;
 
-    const int block_start_row = blockIdx.y * BSZ_R;
+    const int block_start_row = blockIdx.z * BSZ_R;
 
     const int thread_id = thread_row * BSZ_C + thread_col;
     const int nthreads_block = BSZ_R * BSZ_C;
@@ -37,6 +39,19 @@ __global__ void flash_attn_fwd_fp32(const float *Q, const float *K,
     const int warp_id = thread_id / 32;
     const int lane_id = thread_id % 32;
     const int nwarps_block_col = BSZ_C / 32;
+
+    // strides and offsets
+    const int h_idx = blockIdx.x;
+    const int b_idx = blockIdx.y;
+    const long long single_head_stride = (long long)N * D_HEAD;
+    const long long batch_stride = (long long)H * single_head_stride;
+    const long long base_offset =
+        (long long)b_idx * batch_stride + (long long)h_idx * single_head_stride;
+
+    const float *Q_base = Q + base_offset;
+    const float *K_base = K + base_offset;
+    const float *V_base = V + base_offset;
+    float *O_base = O + base_offset;
 
     // each block will be responsible for a row-block of Q and O
     __shared__ float Qs[BSZ_R][D_HEAD];
@@ -64,7 +79,7 @@ __global__ void flash_attn_fwd_fp32(const float *Q, const float *K,
         int c = i % D_HEAD;
         int g_r = block_start_row + r;
 
-        Qs[r][c] = (g_r < N) ? Q[g_r * D_HEAD + c] : 0.0f;
+        Qs[r][c] = (g_r < N) ? Q_base[g_r * D_HEAD + c] : 0.0f;
         Os_acc[r][c] = 0.0f;
     }
 
@@ -79,8 +94,8 @@ __global__ void flash_attn_fwd_fp32(const float *Q, const float *K,
             int c = i % D_HEAD;
             int g_r = block_tile_start + r;
 
-            Ks[r][c] = (g_r < N) ? K[g_r * D_HEAD + c] : 0.0f;
-            Vs[r][c] = (g_r < N) ? V[g_r * D_HEAD + c] : 0.0f;
+            Ks[r][c] = (g_r < N) ? K_base[g_r * D_HEAD + c] : 0.0f;
+            Vs[r][c] = (g_r < N) ? V_base[g_r * D_HEAD + c] : 0.0f;
         }
         __syncthreads();
 
@@ -172,36 +187,39 @@ __global__ void flash_attn_fwd_fp32(const float *Q, const float *K,
         int c = i % D_HEAD;
         int g_r = block_start_row + r;
         if (g_r < N) {
-            O[g_r * D_HEAD + c] = Os_acc[r][c];
+            O_base[g_r * D_HEAD + c] = Os_acc[r][c];
         }
     }
 }
 
 /**
- * @brief Mixed precision FlashAttention Forward Pass Kernel.
+ * @brief Mixed precision FlashAttention Forward Pass Kernel with multiple heads
+ * and batches.
  *
  * @tparam BSZ_R Block size for rows of Q per thread block.
  * @tparam BSZ_C Block size for rows of K/V processed per main loop iteration.
  * @tparam D_HEAD Size of column dimension of input matrices.
  *
- * @param Q, K, V Input matrices in HBM (row-major, half precision).
- * @param O Output matrix in HBM (row-major, half precision).
+ * @param Q, K, V Input matrices in HBM (row-major, layout B, H, N, D_HEAD).
+ * @param O Output matrix in HBM (row-major, layout B, H, N, D_HEAD).
+ * @param B Batch size.
+ * @param H Number of heads.
  * @param N Sequence length.
  * @param d Head dimension.
  *
  * Launch configuration:
- * - gridDim: (1, CEIL_DIV(N, BSZ_R), 1)
- * - blockDim: (BSZ_C, BSZ_R, 1)  (BSZ_C must be a multiple of 32 for warp
- * shuffles and BSZ_C <= 1024)
+ * - gridDim: (H, B, CEIL_DIV(N, BSZ_R))
+ * - blockDim: (BSZ_C, BSZ_R, 1)
  */
 template <const int BSZ_R, const int BSZ_C, const int D_HEAD>
-__global__ void flash_attn_fwd_fp16(const half *Q, const half *K, const half *V,
-                                    half *O, int N, float attn_scaling) {
+__global__ void flash_attn_mh_fwd_fp16(const half *Q, const half *K,
+                                       const half *V, half *O, int B, int H,
+                                       int N, float attn_scaling) {
     // indexing
     const int thread_row = threadIdx.y;
     const int thread_col = threadIdx.x;
 
-    const int block_start_row = blockIdx.y * BSZ_R;
+    const int block_start_row = blockIdx.z * BSZ_R;
 
     const int thread_id = thread_row * BSZ_C + thread_col;
     const int nthreads_block = BSZ_R * BSZ_C;
@@ -209,6 +227,19 @@ __global__ void flash_attn_fwd_fp16(const half *Q, const half *K, const half *V,
     const int warp_id = thread_id / 32;
     const int lane_id = thread_id % 32;
     const int nwarps_block_col = BSZ_C / 32;
+
+    // strides and offsets
+    const int h_idx = blockIdx.x;
+    const int b_idx = blockIdx.y;
+    const long long single_head_stride = (long long)N * D_HEAD;
+    const long long batch_stride = (long long)H * single_head_stride;
+    const long long base_offset =
+        (long long)b_idx * batch_stride + (long long)h_idx * single_head_stride;
+
+    const half *Q_base = Q + base_offset;
+    const half *K_base = K + base_offset;
+    const half *V_base = V + base_offset;
+    half *O_base = O + base_offset;
 
     // each block will be responsible for a row-block of Q and O
     __shared__ half Qs[BSZ_R][D_HEAD];
@@ -234,7 +265,7 @@ __global__ void flash_attn_fwd_fp16(const half *Q, const half *K, const half *V,
         int r = i / D_HEAD;
         int c = i % D_HEAD;
         int g_r = block_start_row + r;
-        Qs[r][c] = (g_r < N) ? Q[g_r * D_HEAD + c] : __float2half(0.0f);
+        Qs[r][c] = (g_r < N) ? Q_base[g_r * D_HEAD + c] : __float2half(0.0f);
         Os_acc[r][c] = 0.0f;
     }
     __syncthreads();
@@ -248,8 +279,10 @@ __global__ void flash_attn_fwd_fp16(const half *Q, const half *K, const half *V,
             int c = i % D_HEAD;
             int g_r = block_tile_start + r;
 
-            Ks[r][c] = (g_r < N) ? K[g_r * D_HEAD + c] : __float2half(0.0f);
-            Vs[r][c] = (g_r < N) ? V[g_r * D_HEAD + c] : __float2half(0.0f);
+            Ks[r][c] =
+                (g_r < N) ? K_base[g_r * D_HEAD + c] : __float2half(0.0f);
+            Vs[r][c] =
+                (g_r < N) ? V_base[g_r * D_HEAD + c] : __float2half(0.0f);
         }
         __syncthreads();
 
@@ -342,7 +375,7 @@ __global__ void flash_attn_fwd_fp16(const half *Q, const half *K, const half *V,
         int c = i % D_HEAD;
         int g_r = block_start_row + r;
         if (g_r < N) {
-            O[g_r * D_HEAD + c] = __float2half(Os_acc[r][c]);
+            O_base[g_r * D_HEAD + c] = __float2half(Os_acc[r][c]);
         }
     }
 }

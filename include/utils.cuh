@@ -46,3 +46,26 @@ inline void gpuAssert(cudaError_t code, const char *file, int line,
 
 #define CUDA_ID 1
 #define HOST_ID 0
+
+/**
+ * @brief Reduces a single precision float value to the maximum across all
+ * active threads in a warp. The result is broadcast back to all threads in the
+ * warp.
+ */
+__device__ inline float warp_reduce_max(float val) {
+    for (int offset = 16; offset > 0; offset /= 2) {
+        val = fmaxf(val, __shfl_down_sync(0xffffffff, val, offset));
+    }
+    return val;
+}
+
+/**
+ * @brief Reduces a single precision float value by summing across all active
+ * threads in a warp. The result is broadcast back to all threads in the warp.
+ */
+__device__ inline float warp_reduce_sum(float val) {
+    for (int offset = 16; offset > 0; offset /= 2) {
+        val += __shfl_down_sync(0xffffffff, val, offset);
+    }
+    return val;
+}
